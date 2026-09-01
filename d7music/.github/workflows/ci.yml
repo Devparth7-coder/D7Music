@@ -52,7 +52,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Tests (41 integration tests, ephemeral PostgreSQL)
+      - name: Each workspace's own typecheck script runs
+        # The root project is the source of truth, but every package that advertises a
+        # `typecheck` script has to actually be able to run it from its own directory —
+        # that is what a platform like Vercel does, and a stale `tsc -p tsconfig.json`
+        # in a workspace looked like a TypeScript bug, not a broken script.
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Vercel deploy layout
+        run: npm run deploy:check
+
+      - name: Tests (56 tests, ephemeral PostgreSQL)
         run: npm test
 
       - name: Boot guardrails fire without an env file

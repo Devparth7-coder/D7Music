@@ -58,9 +58,27 @@ vercel.json  rewrites: /(.*)  ──►  api/index.ts  ──►  apps/api/src/v
 
 ## 4. Deploy
 
-1. Push the repository and import it. **Set Root Directory to the repository root**, not `apps/api`:
-   every `@d7/*` import resolves through a `node_modules` symlink into a sibling workspace, and a
-   sub-directory root puts those files outside the traced project.
+1. Push the repository and import it. **Set Root Directory to the repository root** (empty, or `.`),
+   not `apps/api`: every `@d7/*` import resolves through a `node_modules` symlink into a sibling
+   workspace, and a sub-directory root puts those files — and `vercel.json`, and `api/index.ts` —
+   outside the traced project. This is the single most damaging setting on this target, and it does
+   not announce itself as such; a real attempt produced `error TS5058: The specified path does not
+   exist: 'tsconfig.json'` from inside `/vercel/path0/apps/api`, which reads like a TypeScript bug.
+   `npm run deploy:check` prints exactly what is missing (see step 3).
+   Three settings live only in the dashboard and each one has produced a failed deploy here:
+   **Root Directory** = repository root, **Framework Preset** = Other, **Node.js Version** = 22.x
+   (`vercel.json` also pins `runtime: nodejs22.x` for the function, which is the more specific
+   setting — the dashboard one governs the *build*). Before pushing, confirm the lockfile is
+   committed, because `installCommand` is `npm ci --include=dev` and that command refuses to run
+   without it:
+
+   ```bash
+   git ls-files --error-unmatch package-lock.json   # prints the path, or errors
+   npm ci --dry-run                                 # proves the lockfile matches every workspace manifest
+   ```
+
+   Both pass in this checkout (`npm ci --dry-run` exits 0 against the 109-package tree); an
+   uncommitted lockfile is the difference between that and `npm error code EUSAGE` on Vercel.
 2. Framework preset: **Other**. `framework: null` in `vercel.json` says the same; what must not
    happen is Vercel finding a Next.js app — there isn't one today, which is why `apps/web` contains
    no `next.config.*`.
@@ -68,8 +86,8 @@ vercel.json  rewrites: /(.*)  ──►  api/index.ts  ──►  apps/api/src/v
    there is nothing to configure in the dashboard for those:
 
    ```json
-   "installCommand": "npm ci",
-   "buildCommand": "npm run typecheck",
+   "installCommand": "npm ci --include=dev",
+   "buildCommand": "npm run deploy:check && npm run typecheck",
    "functions": { "api/index.ts": { "maxDuration": 60, "memory": 1024,
      "includeFiles": "packages/database/migrations/**" } }
    ```
@@ -77,12 +95,22 @@ vercel.json  rewrites: /(.*)  ──►  api/index.ts  ──►  apps/api/src/v
    `includeFiles` is not decoration: migrations are discovered with `readdir`
    (`packages/database/src/migrate.ts`), and a build-time file tracer cannot see a file it was never
    imported. Without it the function boots, finds no `.sql`, and serves an empty schema.
-   `buildCommand` is the root `typecheck` on purpose — `npm run build` would try to build `apps/web`.
+   `buildCommand` starts with `npm run deploy:check`
+   (`scripts/verify-vercel-layout.mjs`), which asserts from the build's own working directory that
+   `api/index.ts`, `vercel.json`, the root `tsconfig.json`, `packages/config` and a non-empty
+   `packages/database/migrations` are all present — i.e. that the build is looking at the repository
+   root — and otherwise fails with that sentence instead of an unrelated complaint. It is a
+   dependency-free `node` script, so it runs before dependencies are trusted and on a Hobby plan the
+   same as anywhere. The rest is the root `typecheck` on purpose: `npm run build` would try to build
+   `apps/web`.
+
+   Run the same check locally before you deploy: `npm run deploy:check` →
+   `vercel layout OK — /path/to/d7music`.
 4. Add the environment (Settings → Environment Variables). Minimum viable set:
 
    | Variable | Value |
    | --- | --- |
-   | `NODE_ENV` | `production` |
+   | `NODE_ENV` | `production` — but see the warning under this table: it also changes what the *build* installs |
    | `APP_SECRET` | 32+ random chars — the boot guard refuses the built-in default |
    | `DATABASE_URL` | pooled Postgres URL with `sslmode=require` |
    | `DB_POOL_MAX` | `1` |
@@ -94,6 +122,16 @@ vercel.json  rewrites: /(.*)  ──►  api/index.ts  ──►  apps/api/src/v
    | `STORAGE_DRIVER` / `S3_*` | §7 |
    | `STREAM_REDIRECT` | `true` with an s3 driver, `false` otherwise |
    | `MUSIC_PROVIDER` | `none` unless you have licensed credentials; `local_library` is the default and needs no keys |
+
+   **`NODE_ENV=production` is present during the Vercel build as well as at runtime, and npm derives
+   `omit=dev` from it.** `npm ci` then installs no devDependencies, so `tsc` does not exist and the
+   build dies on a missing binary while every source file is fine — reproduced locally: with
+   `NODE_ENV=production` the install drops `node_modules/typescript` and `node_modules/vitest`
+   (`npm config get omit` reports `dev`) and `npm run typecheck` exits with `sh: 1: tsc: not found`.
+   The `--include=dev` in `installCommand` above is what neutralises it; `npm run deploy:check` names
+   that exact cause when it sees the combination. The alternative is to drop the typecheck from
+   `buildCommand` and let CI typecheck — nothing at *runtime* needs a devDependency, because `tsx` is
+   declared as a production dependency on purpose.
 
    A variable set to the empty string means "unset" here — the schema drops `''` before parsing, so
    `APP_SECRET=` fails the production guard instead of signing sessions with an empty secret
@@ -263,6 +301,18 @@ Verified in this repository (`npm run typecheck`, `npm test`, `npm run docs:chec
   `release-sync` (`fetchedAlbums: 12`), `recommendations` (`computed: 3, users: 3`), `reindex`
   (`documents: 110`), `trending` and `queue-drain` (`processed: 0`, empty queue) — plus the contended
   run in §6. Boot ran with `API_MIGRATE_AT_BOOT=false`, which is the setting a Vercel deploy should use;
+* the per-workspace scripts a platform actually invokes: `npm run typecheck -w @d7/api` now passes
+  (it previously failed with `TS5058`, because `apps/api` advertises a `typecheck` script pointing at a
+  `tsconfig.json` that has never existed there — this repository typechecks as *one* project at the
+  root), `npm run typecheck --workspaces --if-present` is a CI step so it cannot rot again, and
+  `scripts/verify-vercel-layout.mjs` was tested by running it from the repo root (passes), from
+  `apps/api` (fails, naming all six missing things) and from a doctored root with `api/index.ts`
+  removed (fails, naming just that);
+* the devDependencies trap and its fix, end to end: `NODE_ENV=production npm ci` in this repository
+  removed `typescript` and `vitest`, `npm run typecheck` then failed with `sh: 1: tsc: not found`,
+  `npm run deploy:check` failed naming `NODE_ENV` and `omit=dev`, and `NODE_ENV=production npm ci
+  --include=dev` put both back so the whole sweep passed again (typecheck clean, 56 tests,
+  `docs:check` OK);
 * `vercel.json` validates against Vercel's published JSON schema (`additionalProperties: false`, so
   the file cannot carry unknown keys or stray comments);
 * the three new variables (`API_MIGRATE_AT_BOOT`, `STREAM_REDIRECT`, `CRON_SECRET`) exist in the
@@ -294,7 +344,13 @@ curl -sS -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/jobs/trendin
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `Cannot find module '@d7/config'` (or a build error about files outside the project) | Root Directory is not the repository root. §4 step 1. |
+| `error TS5058: The specified path does not exist: 'tsconfig.json'`, with `npm error path /vercel/path0/apps/api` | Root Directory is `apps/api`, so the build ran that workspace's script from inside it. Fixed at the repo level (workspace scripts now point at the root project, so they work from either directory), but this deploy cannot work from a sub-directory root at all: set Root Directory to the repository root and redeploy. `npm run deploy:check` from `apps/api` reproduces the whole list. §4 step 1. |
+| `Cannot find module '@d7/config'` **during the build** (a file-not-found about a sibling directory) | Same cause as the row above: Root Directory is not the repository root. §4 step 1. |
+| `Cannot find module '@d7/config'` **when the function runs** (build succeeded, every request 500s) | The workspace manifests resolve `@d7/*` to TypeScript sources (`packages/config/package.json` → `"exports": { ".": "./src/index.ts" }`), which `tsx` reads happily and a compiled-lambda layout may not. This has not been reproduced here — no Vercel credentials — so if you hit it, paste the runtime log: the fix is a real build step (emit `dist/` per package and point `main`/`exports` at it) rather than a config tweak. |
+| `sh: 1: tsc: not found` (or `error TS2307: Cannot find module 'vitest'`) with no other complaint | `NODE_ENV=production` made the build's `npm ci` omit devDependencies. Use `npm ci --include=dev`, or remove the typecheck from `buildCommand`. §4 step 4. |
+| `npm error code EUSAGE` / “package-lock.json is necessary” | `package-lock.json` is not committed, and `installCommand: npm ci --include=dev` requires it. Commit it, or set the dashboard Install Command to `npm install`. |
+| `Couldn't find any \`pages\` or \`app\` directory` | Root Directory is `apps/web` (`next` is a dependency there, so Vercel detected Next.js). This deploy has no web tier; the root must be the repository root. |
+| Function fails to start with an ESM/`SyntaxError` about `import` | The project's Node.js version is below 20. `engines.node` is `>=20.9.0` and `vercel.json` pins `nodejs22.x` for the function; align the dashboard setting too. |
 | Build fails with a Next.js error | Framework preset is not **Other**, or a `next.config.*` turned up at the repository root and made Vercel detect a framework again. Set the preset; keep `framework: null`. |
 | Every route 404s but `/api/index` alone answers | The rewrite is missing or the runtime replaced `req.url` with the destination and sent no `x-matched-path`. Use the `?__d7path=/$1` destination (§2). |
 | `404 NOT_FOUND` from Fastify for `/api/health`, and the Vercel 404 page elsewhere | You deployed with the rewrite matching only part of the tree, or `KNOWN_PREFIXES` no longer covers a route you added — extend it in `apps/api/src/vercel.ts`. |

@@ -46,6 +46,7 @@ npm run dev                  # migrate + API (+ web when it exists), one termina
 npm test                     # 56 tests: 41 API integration + 15 serverless (real embedded PostgreSQL, ~35 s)
 npm run typecheck            # tsc --noEmit over packages, services, jobs, apps/api, tests
 npm run docs:check            # docs lint + env contract (`.env.example`, ENVIRONMENT.md)
+npm run deploy:check          # Vercel-only: proves the project root looks like this repository
 npm run db:status             # [x] per applied migration, with checksum timing
 npm run db:migrate           # idempotent; safe to re-run
 npm run db:seed              # dev only

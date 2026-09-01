@@ -67,6 +67,22 @@ npm run db:migrate
 npm run db:seed                        # DEV ONLY — see §2.2
 ```
 
+**If your npm blocks install scripts** (npm 11 with `allow-scripts`, or `--ignore-scripts`), it will
+print `1 package has install scripts not yet covered by allowScripts` naming `esbuild`. That is
+informational here, and the two scripted packages in this tree are both safe to skip: `esbuild`'s
+`install.js` only chmods and version-checks a binary that already ships as the `@esbuild/linux-x64`
+*optional* dependency, and `msgpackr-extract` (under `bullmq`, which is only constructed when
+`REDIS_URL` is set) builds an accelerator that `msgpackr` runs without. Verified by installing
+`esbuild@0.28.2` with `--ignore-scripts` and transpiling TypeScript through it, and by running
+`npx tsx` — the runtime every `npm run` entry in this section uses.
+
+Two cases where you *do* need to approve the script: `npm ci --omit=optional`, or a lockfile installed
+on a different platform than the one running it (the postinstall's fallback download is how esbuild
+self-heals when its optional package is absent). Then `npm approve-scripts esbuild`, or point
+`ESBUILD_BINARY_PATH` at a working binary. The failure mode is loud rather than silent: `require`
+succeeds and the first call throws `The package "@esbuild/linux-x64" could not be found, and is needed
+by esbuild.` — verified, and verified to be repaired by `ESBUILD_BINARY_PATH` alone.
+
 ### 2.1 `.env` for a real deployment
 
 The smallest set that produces a working, honest production instance (full explanations in

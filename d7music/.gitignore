@@ -1,4 +1,7 @@
 node_modules/
+
+# Vercel CLI state (created by `vercel link`; holds project/org ids, never secrets)
+.vercel/
 .next/
 out/
 dist/

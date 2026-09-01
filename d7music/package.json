@@ -32,7 +32,8 @@
     "sync:releases": "tsx jobs/release-sync/src/run.ts",
     "recommendations:update": "tsx jobs/recommendation-update/src/run.ts",
     "worker": "tsx services/release-sync/src/worker.ts",
-    "docs:env": "node scripts/check-env-docs.mjs"
+    "docs:env": "node scripts/check-env-docs.mjs",
+    "deploy:check": "node scripts/verify-vercel-layout.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
