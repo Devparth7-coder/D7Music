@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.data/
+storage/
+.DS_Store
+
+# local run logs (dev.mjs, backup timers)
+*.log
+npm-debug.log*

@@ -1,0 +1,178 @@
+# D7music — local/integration stack.
+#
+#   docker compose up db              # just Postgres, then run the app on the host
+#   docker compose up                 # db + redis + api + worker
+#   docker compose --profile edge up  # + nginx with TLS config as a template
+#   docker compose --profile tools run --rm migrate
+#
+# It is a *topology* demo, not a production template: no secrets, no TLS, no backup job, and
+# ports published to the host for convenience. Production notes are in docs/DEPLOYMENT.md.
+
+name: d7music
+
+# One image, four commands. Every service that runs app code builds (and therefore tags) the
+# same image, so `docker compose up` works from a clean daemon without a separate build step —
+# BuildKit layer cache makes the repeat builds free.
+x-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+
+x-app-env: &app-env
+  # Everything the app reads is here rather than in an .env file, so `docker compose config`
+  # shows the full contract and a missing value is visible instead of inherited by accident.
+  NODE_ENV: development
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  API_HOST: 0.0.0.0
+  API_PORT: 4000
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+  TRUST_PROXY: "true"
+  APP_SECRET: ${APP_SECRET:-d7-compose-dev-secret-not-for-production}
+  DB_DRIVER: postgres
+  DATABASE_URL: postgres://d7:${POSTGRES_PASSWORD:-d7}@db:5432/d7music
+  DB_POOL_MAX: 5
+  REDIS_URL: ${REDIS_URL:-}
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_DIR: /app/.data/storage
+  MAIL_OUTBOX_DIR: /app/.data/outbox
+  MUSIC_PROVIDER: ${MUSIC_PROVIDER:-local_library}
+  RELEASE_SYNC_ENABLED: ${RELEASE_SYNC_ENABLED:-true}
+  ALLOW_UNLICENSED_STREAM: "false"
+  REQUIRE_LICENSE_FOR_UPLOAD: "true"
+  PAYMENT_PROVIDER: manual
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: d7
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-d7}
+      POSTGRES_DB: d7music
+      # PGlite (the dev datastore) embeds PostgreSQL 18.3, so the containers match it and
+      # "works in dev, fails in prod" from a version skew cannot happen.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    command: ["postgres", "-c", "max_connections=100"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U d7 -d d7music"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+    profiles: ["redis"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: *app-build
+    image: d7music:local
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # The fleet should not each arm the scheduler; the worker owns it here.
+      RELEASE_SYNC_ENABLED: ${RELEASE_SYNC_API_ENABLED:-false}
+    volumes:
+      - audio:/app/.data
+    ports:
+      - "127.0.0.1:${API_PORT:-4000}:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: *app-build
+    image: d7music:local
+    command: ["node", "--import", "tsx", "services/release-sync/src/worker.ts"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      RELEASE_SYNC_ENABLED: "true"
+      REDIS_URL: ${REDIS_URL:-}
+    volumes:
+      - audio:/app/.data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # One-shot: `docker compose --profile tools run --rm migrate`
+  migrate:
+    build: *app-build
+    image: d7music:local
+    command: ["node", "--import", "tsx", "packages/database/src/cli.ts", "migrate"]
+    environment:
+      <<: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  # One-shot demo data. NEVER against a production database: it writes a synthetic catalog and
+  # two accounts with published passwords (docs/DEPLOYMENT.md §2.2).
+  seed:
+    build: *app-build
+    image: d7music:local
+    command: ["node", "--import", "tsx", "packages/database/src/cli.ts", "seed"]
+    environment:
+      <<: *app-env
+    volumes:
+      - audio:/app/.data
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  # `docker compose --profile s3 up minio` + STORAGE_DRIVER=s3 + S3_ENDPOINT=http://minio:9000
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: d7
+      MINIO_ROOT_PASSWORD: d7d7d7d7
+    volumes:
+      - miniodata:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    profiles: ["s3"]
+
+  edge:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./deploy/nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    profiles: ["edge"]
+
+  # The front end is not in this build yet (apps/web contains only package.json), so there is
+  # nothing to `next build`. This block is the intended shape — uncomment it when apps/web lands.
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/web/Dockerfile
+  #   environment:
+  #     API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #   depends_on:
+  #     - api
+
+volumes:
+  pgdata:
+  audio:
+  redisdata:
+  miniodata:

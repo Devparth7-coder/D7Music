@@ -1,0 +1,20 @@
+/** @d7/database — schema access, catalog read model, sync write layer, seed. */
+export * from './client.js';
+export * from './sql.js';
+export * from './map.js';
+export * from './migrate.js';
+export * from './catalog.js';
+export * from './columns.js';
+export * from './playlists.js';
+export * from './social.js';
+export * from './telemetry.js';
+export * from './sync.js';
+export * from './searchIndex.js';
+export * from './releases.js';
+export * from './home.js';
+export * from './admin.js';
+export * from './accounts.js';
+export * from './creator.js';
+export * from './auth-hash.js';
+export * from './assistant.js';
+export { createUserSeed, seedCatalog, type SeedOptions, type SeedResult } from './seed.js';

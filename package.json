@@ -1,0 +1,62 @@
+{
+  "name": "d7music",
+  "private": true,
+  "version": "0.1.0",
+  "description": "D7music \u2014 production-grade, provider-agnostic AI music streaming platform",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*",
+    "jobs/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev -w @d7/web",
+    "dev:api": "npm run dev -w @d7/api",
+    "build": "npm run typecheck && npm run build -w @d7/web",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "docs:check": "node scripts/check-docs.mjs",
+    "env:snapshot": "tsx scripts/env-snapshot.mts",
+    "test:watch": "vitest",
+    "db:migrate": "tsx packages/database/src/cli.ts migrate",
+    "db:seed": "tsx packages/database/src/cli.ts seed",
+    "db:status": "tsx packages/database/src/cli.ts status",
+    "db:reset": "tsx packages/database/src/cli.ts reset",
+    "audio:generate": "tsx packages/database/src/cli.ts audio",
+    "sync:releases": "tsx jobs/release-sync/src/run.ts",
+    "recommendations:update": "tsx jobs/recommendation-update/src/run.ts",
+    "worker": "tsx services/release-sync/src/worker.ts",
+    "docs:env": "node scripts/check-env-docs.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.17.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^10.1.1",
+    "@fastify/static": "^10.1.3",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^6.3.4",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.12.1",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.5.4",
+    "fastify-plugin": "^5.0.1",
+    "tsx": "^4.23.13"
+  }
+}

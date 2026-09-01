@@ -1,0 +1,32 @@
+# Nightly backup (see deploy/backup.sh for what it writes and why both halves are needed).
+#
+#   sudo systemctl enable --now d7music-backup.timer
+#   systemd-analyze verify deploy/systemd/d7music-backup.service   # sanity check after editing
+#
+# The timer, not this unit, carries the schedule.
+
+[Unit]
+Description=D7music backup (pg_dump + local objects)
+Documentation=file:/srv/d7music/docs/OPERATIONS.md
+
+[Service]
+Type=oneshot
+User=d7music
+Group=d7music
+WorkingDirectory=/srv/d7music
+EnvironmentFile=/etc/d7music/d7music.env
+# Keep backups of a database out of the directory being backed up.
+Environment=D7_BACKUP_DIR=/var/backups/d7music
+Environment=D7_BACKUP_KEEP=7
+ExecStart=/srv/d7music/deploy/backup.sh
+TimeoutStartSec=45min
+# Read-only on the app, write-only on the backup dir: a compromised app user still cannot rewrite
+# its own backups.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/backups/d7music
+
+[Install]
+WantedBy=multi-user.target

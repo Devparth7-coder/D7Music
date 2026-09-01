@@ -1,0 +1,67 @@
+# D7music API. One unit per node; scale by running the same unit on more machines, not by
+# adding instances here (RuntimeMaxSec would just make the restart look like a crash).
+#
+#   sudo useradd --system --create-home --home-dir /srv/d7music --shell /usr/sbin/nologin d7music
+#   sudo cp deploy/systemd/d7music-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now d7music-api
+#
+# Secrets live in /etc/d7music/d7music.env (chmod 0640, root:d7music) — never in this file.
+# Note: `#` starts a comment for systemd too, so the env file must be one KEY=VALUE per line
+# (which is exactly what .env.example guarantees and scripts/check-env-docs.mjs enforces).
+
+[Unit]
+Description=D7music API
+Documentation=file:/srv/d7music/docs/DEPLOYMENT.md
+After=network-online.target
+Wants=network-online.target
+# If Postgres runs on this box, order after it so a reboot does not start the API against a
+# socket that is not listening yet.
+After=postgresql.service
+
+[Service]
+Type=simple
+User=d7music
+Group=d7music
+WorkingDirectory=/srv/d7music
+EnvironmentFile=/etc/d7music/d7music.env
+# Adjust to your node (`command -v node`). tsx is a runtime dependency of this repo, so no
+# global install is needed: node resolves it from /srv/d7music/node_modules.
+ExecStart=/usr/local/bin/node --import tsx apps/api/src/main.ts
+
+# The app handles SIGTERM itself (8 s internal deadline) and stops the schedulers before exit.
+KillSignal=SIGTERM
+TimeoutStopSec=25
+TimeoutStartSec=90
+Restart=on-failure
+RestartSec=2s
+SuccessExitStatus=0
+
+# A health probe that also fails a stuck-but-listening process. /api/health runs two queries and
+# a storage probe, so it is a genuine readiness signal; 503 counts as a failure.
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 30); do curl -fsS "http://127.0.0.1:${API_PORT:-4000}/api/health" >/dev/null && exit 0; sleep 2; done; exit 1'
+
+LimitNOFILE=65536
+UMask=0027
+
+# ---- hardening -----------------------------------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectClock=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+# Writable paths: local audio, the mail outbox, and (dev only) the PGlite cluster. With
+# STORAGE_DRIVER=s3 the storage line is unnecessary; keep whatever you actually write to.
+ReadWritePaths=/var/lib/d7music /srv/d7music/.data
+# MemoryDenyWriteExecute is intentionally NOT set: V8 needs an executable heap for JIT.
+# SystemCallFilter is left off for the same reason — a music API is I/O bound and the value
+# here would be a false sense of security once node's syscalls are whitelisted by trial and error.
+
+[Install]
+WantedBy=multi-user.target

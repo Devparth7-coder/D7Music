@@ -1,0 +1,20 @@
+{
+  "name": "@d7/service-notifications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@d7/database": "*",
+    "@d7/types": "*"
+  }
+}

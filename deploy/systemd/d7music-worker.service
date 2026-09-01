@@ -1,0 +1,43 @@
+# The queue + release-sync worker. This is the process that owns the scheduler, so set
+# RELEASE_SYNC_ENABLED=true HERE and false in /etc/d7music/d7music.env (which the API reads too).
+#
+# Run exactly one of these per queue namespace. The Postgres queue claims jobs with
+# FOR UPDATE SKIP LOCKED (so N of them are safe for *jobs*), but the sync scheduler's
+# check-then-run against sync_cursors.next_run_at is not an atomic claim — two schedulers can
+# both start a run in the same window and double the provider's request rate.
+
+[Unit]
+Description=D7music worker (release sync + job queue)
+Documentation=file:/srv/d7music/docs/OPERATIONS.md
+After=network-online.target
+
+[Service]
+Type=simple
+User=d7music
+Group=d7music
+WorkingDirectory=/srv/d7music
+EnvironmentFile=/etc/d7music/d7music.env
+Environment=RELEASE_SYNC_ENABLED=true
+ExecStart=/usr/local/bin/node --import tsx services/release-sync/src/worker.ts
+KillSignal=SIGTERM
+# The worker finishes the job it is draining before exiting; give it room.
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=32768
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+ReadWritePaths=/var/lib/d7music /srv/d7music/.data
+
+[Install]
+WantedBy=multi-user.target

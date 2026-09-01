@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@d7/types": [
+        "packages/types/src/index.ts"
+      ],
+      "@d7/config": [
+        "packages/config/src/index.ts"
+      ],
+      "@d7/database": [
+        "packages/database/src/index.ts"
+      ],
+      "@d7/music-providers": [
+        "packages/music-providers/src/index.ts"
+      ],
+      "@d7/music-providers/*": [
+        "packages/music-providers/src/*"
+      ],
+      "@d7/ui": [
+        "packages/ui/src/index.ts"
+      ],
+      "@d7/service-release-sync": [
+        "services/release-sync/src/index.ts"
+      ],
+      "@d7/service-recommendations": [
+        "services/recommendation-engine/src/index.ts"
+      ],
+      "@d7/service-search": [
+        "services/search/src/index.ts"
+      ],
+      "@d7/service-notifications": [
+        "services/notifications/src/index.ts"
+      ],
+      "@d7/cache": [
+        "packages/cache/src/index.ts"
+      ],
+      "@d7/audio-storage": [
+        "packages/audio-storage/src/index.ts"
+      ],
+      "@d7/service-ai-assistant": [
+        "services/ai-assistant/src/index.ts"
+      ],
+      "@d7/api": [
+        "apps/api/src/index.ts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# Periodic jobs, for deployments that prefer cron-style timers to the long-lived worker.
+# Pick ONE topology: d7music-worker.service (scheduler armed) or this timer — see docs/DEPLOYMENT.md §11.
+#
+#   sudo systemctl enable --now d7music-jobs.timer
+#   systemctl list-timers d7music-jobs.timer
+#
+# Both ExecStart steps are in one Type=oneshot unit, and systemd will not start a unit that is
+# still active, so a slow run cannot overlap with itself (no flock needed). Persistent=true runs a
+# missed job after downtime, which is what you want after a maintenance window.
+
+[Unit]
+Description=D7music periodic jobs (release sync + recommendations)
+Documentation=file:/srv/d7music/docs/OPERATIONS.md
+
+[Timer]
+# Every 6 h at :15. When you change the cadence, change RELEASE_SYNC_INTERVAL_MIN to match: with
+# this timer the *timer* is the schedule (a CLI run does not consult the cursor's next_run_at),
+# while the env var is what the worker's own scheduler uses.
+OnCalendar=*-*-* 00/6:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=d7music-jobs.service
+
+[Install]
+WantedBy=timers.target

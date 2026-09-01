@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "packages/*/src/**/*.ts",
+    "services/*/src/**/*.ts",
+    "jobs/*/src/**/*.ts",
+    "apps/api/**/*.ts",
+    "api/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "apps/web",
+    "node_modules"
+  ]
+}

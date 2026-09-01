@@ -1,0 +1,36 @@
+# One-shot job run: provider sync, then recommendations. Driven by d7music-jobs.timer.
+# Both commands are the same code paths the worker's scheduler uses, so a manual
+# `systemctl start d7music-jobs.service` and a scheduled run are identical.
+#
+# To pass flags, override the unit (systemctl edit d7music-jobs.service) rather than editing this
+# file, e.g. ExecStart= followed by a run with -- --max 20.
+
+[Unit]
+Description=D7music periodic jobs (one run)
+Documentation=file:/srv/d7music/docs/OPERATIONS.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=d7music
+Group=d7music
+WorkingDirectory=/srv/d7music
+EnvironmentFile=/etc/d7music/d7music.env
+# The scheduler is the worker's job; a CLI run must not also arm it.
+Environment=RELEASE_SYNC_ENABLED=false
+
+TimeoutStartSec=30min
+Nice=10
+# No IOWeight/BlockIO settings: the sync is I/O bound and provider-latency bound, so throttling it
+# only makes the run longer while the next one queues behind it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/d7music /srv/d7music/.data
+
+ExecStart=/usr/local/bin/node --import tsx jobs/release-sync/src/run.ts
+ExecStart=/usr/local/bin/node --import tsx jobs/recommendation-update/src/run.ts
+
+[Install]
+WantedBy=multi-user.target
