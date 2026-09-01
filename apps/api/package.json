@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/main.ts",
-    "start": "node --import tsx src/main.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "start": "node --import tsx src/main.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
