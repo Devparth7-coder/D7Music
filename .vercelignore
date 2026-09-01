@@ -1,0 +1,5 @@
+!packages/
+!.next
+node_modules
+.git
+.gitignore
