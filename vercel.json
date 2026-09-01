@@ -4,7 +4,6 @@
   "buildCommand": "",
   "framework": "nextjs",
   "outputDirectory": "apps/web/.next",
-  "rootDirectory": "apps/web",
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
